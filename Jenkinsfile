@@ -38,8 +38,11 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
-                          -Dsonar.java.binaries=.'''
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -X \
+                          -Dsonar.projectName=BoardGame \
+                          -Dsonar.projectKey=BoardGame \
+                          -Dsonar.java.binaries=target/classes \
+                          -Dsonar.host.url=http://13.203.212.214:9000'''
                 }
             }
         }
@@ -102,7 +105,7 @@ pipeline {
         
         stage('Verify the Deployment') {
             steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.2.147:6443') {
+                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.6.167:6443') {
                     sh "kubectl get pods -n webapps"
                     sh "kubectl get svc -n webapps"
                 }
@@ -139,10 +142,9 @@ pipeline {
                     from: 'jenkins@example.com',
                     replyTo: 'jenkins@example.com',
                     mimeType: 'text/html',
-                    attachmentsPattern: 'trivy-image-report.html'
+                    attachmentsPattern: 'trivy-fs-report.html, trivy-image-report.html'
                 )
             }
         }
     }
 }
-
