@@ -13,66 +13,33 @@ pipeline {
     stages {
         stage('Git Checkout') {
             steps {
-                script {
-                    try {
-                        git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
-                    } catch (Exception e) {
-                        echo "Git checkout failed: ${e.getMessage()}"
-                    }
-                }
+                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
             }
         }
 
         stage('Compile') {
             steps {
-                script {
-                    try {
-                        sh "mvn clean compile"
-                    } catch (Exception e) {
-                        sh "mvn compile || echo 'Compilation issues detected but continuing...'"
-                    }
-                }
+                sh "mvn compile"
             }
         }
 
         stage('Test') {
             steps {
-                script {
-                    try {
-                        sh "mvn test"
-                    } catch (Exception e) {
-                        sh "mvn test -DfailIfNoTests=false -Dmaven.test.failure.ignore=true || echo 'Tests completed with issues'"
-                    }
-                }
+                sh "mvn test"
             }
         }
 
         stage('File System Scan') {
             steps {
-                script {
-                    try {
-                        sh "trivy fs --format json -o trivy-fs-report.json . || echo 'Trivy scan completed with warnings'"
-                    } catch (Exception e) {
-                        sh "echo '{\"Results\": []}' > trivy-fs-report.json"
-                    }
-                }
+                sh "trivy fs --format table -o trivy-fs-report.html ."
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    try {
-                        withSonarQubeEnv('sonar') {
-                            sh '''$SCANNER_HOME/bin/sonar-scanner \
-                                  -Dsonar.projectName=BoardGame \
-                                  -Dsonar.projectKey=BoardGame \
-                                  -Dsonar.java.binaries=target/classes \
-                                  -Dsonar.host.url=http://13.203.212.214:9000 || echo "SonarQube analysis completed with warnings"'''
-                        }
-                    } catch (Exception e) {
-                        echo "SonarQube analysis issues: ${e.getMessage()}"
-                    }
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
+                          -Dsonar.java.binaries=.'''
                 }
             }
         }
@@ -80,37 +47,21 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    try {
-                        waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
-                    } catch (Exception e) {
-                        echo "Quality Gate check issues: ${e.getMessage()}"
-                    }
+                    waitForQualityGate abortPipeline: false
                 }
             }
         }
 
         stage('Build') {
             steps {
-                script {
-                    try {
-                        sh "mvn clean package -DskipTests"
-                    } catch (Exception e) {
-                        sh "mvn package -DskipTests -Dmaven.test.skip=true || mvn compile"
-                    }
-                }
+                sh "mvn package"
             }
         }
 
         stage('Publish To Nexus') {
             steps {
-                script {
-                    try {
-                        withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                            sh "mvn deploy -DskipTests || echo 'Nexus deployment completed with warnings'"
-                        }
-                    } catch (Exception e) {
-                        echo "Nexus deployment issues: ${e.getMessage()}"
-                    }
+                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                    sh "mvn deploy"
                 }
             }
         }
@@ -118,13 +69,8 @@ pipeline {
         stage('Build & Tag Docker Image') {
             steps {
                 script {
-                    try {
-                        withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                            sh "docker build -t giri8608/board:latest . || echo 'Docker build completed with warnings'"
-                            sh "docker tag giri8608/board:latest giri8608/board:${env.BUILD_NUMBER} || echo 'Docker tagging completed'"
-                        }
-                    } catch (Exception e) {
-                        echo "Docker build issues: ${e.getMessage()}"
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker build -t giri8608/board:latest ."
                     }
                 }
             }
@@ -132,26 +78,15 @@ pipeline {
 
         stage('Docker Image Scan') {
             steps {
-                script {
-                    try {
-                        sh "trivy image --format json -o trivy-image-report.json giri8608/board:latest || echo 'Image scan completed with findings'"
-                    } catch (Exception e) {
-                        sh "echo '{\"Results\": []}' > trivy-image-report.json"
-                    }
-                }
+                sh "trivy image --format table -o trivy-image-report.html giri8608/board:latest"
             }
         }
 
         stage('Push Docker Image') {
             steps {
                 script {
-                    try {
-                        withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                            sh "docker push giri8608/board:latest || echo 'Latest image push completed'"
-                            sh "docker push giri8608/board:${env.BUILD_NUMBER} || echo 'Versioned image push completed'"
-                        }
-                    } catch (Exception e) {
-                        echo "Docker push issues: ${e.getMessage()}"
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker push giri8608/board:latest"
                     }
                 }
             }
@@ -159,29 +94,17 @@ pipeline {
 
         stage('Deploy To Kubernetes') {
             steps {
-                script {
-                    try {
-                        withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.6.167:6443') {
-                            sh "kubectl apply -f deployment-service.yaml || echo 'Kubernetes deployment applied with warnings'"
-                        }
-                    } catch (Exception e) {
-                        echo "Kubernetes deployment issues: ${e.getMessage()}"
-                    }
+                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.41.129:6443') {
+                    sh "kubectl apply -f deployment-service.yaml"
                 }
             }
         }
 
         stage('Verify the Deployment') {
             steps {
-                script {
-                    try {
-                        withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.6.167:6443') {
-                            sh "kubectl get pods -n webapps || echo 'Pod status retrieved'"
-                            sh "kubectl get svc -n webapps || echo 'Service status retrieved'"
-                        }
-                    } catch (Exception e) {
-                        echo "Verification issues: ${e.getMessage()}"
-                    }
+                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.41.129:6443') {
+                    sh "kubectl get pods -n webapps"
+                    sh "kubectl get svc -n webapps"
                 }
             }
         }
@@ -192,8 +115,8 @@ pipeline {
             script {
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = 'SUCCESS'
-                def bannerColor = 'green'
+                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
+                def bannerColor = pipelineStatus == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
                     <html>
@@ -203,35 +126,21 @@ pipeline {
                     <div style="background-color: ${bannerColor}; padding: 10px;">
                     <h3 style="color: white;">Pipeline Status: ${pipelineStatus}</h3>
                     </div>
-                    <p>Pipeline completed successfully! Check the <a href="${env.BUILD_URL}">console output</a> for details.</p>
+                    <p>Check the <a href="${env.BUILD_URL}">console output</a>.</p>
                     </div>
                     </body>
                     </html>
                 """
 
-                try {
-                    emailext (
-                        subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus}",
-                        body: body,
-                        to: 'giridharan9608@gmail.com',
-                        from: 'jenkins@example.com',
-                        replyTo: 'jenkins@example.com',
-                        mimeType: 'text/html',
-                        attachmentsPattern: 'trivy-fs-report.json, trivy-image-report.json'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification issues: ${e.getMessage()}"
-                }
-            }
-        }
-        cleanup {
-            script {
-                try {
-                    sh "docker rmi giri8608/board:${env.BUILD_NUMBER} || echo 'Image cleanup completed'"
-                    sh "docker system prune -f || echo 'Docker cleanup completed'"
-                } catch (Exception e) {
-                    echo "Cleanup completed with notes: ${e.getMessage()}"
-                }
+                emailext (
+                    subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus}",
+                    body: body,
+                    to: 'giridharan9608@gmail.com',
+                    from: 'jenkins@example.com',
+                    replyTo: 'jenkins@example.com',
+                    mimeType: 'text/html',
+                    attachmentsPattern: 'trivy-image-report.html'
+                )
             }
         }
     }
