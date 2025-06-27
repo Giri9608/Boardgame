@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -65,8 +66,10 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                    sh "mvn deploy"
+                withCredentials([usernamePassword(credentialsId: 'nexus_cred', usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
+                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                        sh "mvn deploy"
+                    }
                 }
             }
         }
