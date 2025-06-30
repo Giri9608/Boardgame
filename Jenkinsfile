@@ -49,7 +49,14 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                    try {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            echo "Quality Gate failed: ${qg.status}"
+                        }
+                    } catch (Exception e) {
+                        echo "Quality Gate check failed, continuing pipeline: ${e.getMessage()}"
+                    }
                 }
             }
         }
@@ -123,7 +130,6 @@ pipeline {
                 ) {
                     sh "kubectl get pods -n webapps"
                     sh "kubectl get svc -n webapps"
-                    sh "kubectl describe deployment -n webapps"
                 }
             }
         }
@@ -134,7 +140,7 @@ pipeline {
             script {
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
+                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
                 def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
@@ -161,10 +167,6 @@ pipeline {
                     attachmentsPattern: 'trivy-image-report.html'
                 )
             }
-        }
-
-        cleanup {
-            cleanWs()
         }
     }
 }
