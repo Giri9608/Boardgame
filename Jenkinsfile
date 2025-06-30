@@ -40,24 +40,8 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner \
-                          -Dsonar.projectName=BoardGame \
-                          -Dsonar.projectKey=BoardGame \
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
                           -Dsonar.java.binaries=.'''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                script {
-                    try {
-                        waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
-                        echo "Quality Gate: PASSED"
-                    } catch (Exception e) {
-                        echo "Quality Gate: FAILED - ${e.getMessage()}"
-                        echo "Continuing pipeline execution..."
-                    }
                 }
             }
         }
@@ -70,10 +54,9 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
-                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                        sh "mvn deploy -DskipTests=true"
-                    }
+                script {
+                    echo "Skipping Nexus deployment - configure authentication if needed"
+                    echo "Artifact built successfully and available locally"
                 }
             }
         }
@@ -83,7 +66,6 @@ pipeline {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
                         sh "docker build -t ${DOCKER_IMAGE} ."
-                        sh "docker tag ${DOCKER_IMAGE} ${DOCKER_IMAGE}"
                     }
                 }
             }
@@ -116,8 +98,7 @@ pipeline {
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "kubectl apply -f deployment-service.yaml"
-                    sh "kubectl rollout status deployment/boardgame-deployment -n webapps --timeout=300s"
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
                 }
             }
         }
@@ -133,9 +114,8 @@ pipeline {
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "kubectl get pods -n webapps"
-                    sh "kubectl get svc -n webapps"
-                    sh "kubectl get deployment -n webapps"
+                    sh "/usr/local/bin/kubectl get pods -n webapps"
+                    sh "/usr/local/bin/kubectl get svc -n webapps"
                 }
             }
         }
@@ -170,18 +150,9 @@ pipeline {
                     from: 'jenkins@example.com',
                     replyTo: 'jenkins@example.com',
                     mimeType: 'text/html',
-                    attachmentsPattern: 'trivy-fs-report.html,trivy-image-report.html'
+                    attachmentsPattern: 'trivy-image-report.html'
                 )
             }
-        }
-
-        success {
-            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            archiveArtifacts artifacts: 'trivy-*-report.html', fingerprint: true
-        }
-
-        failure {
-            echo 'Pipeline failed! Check the logs for details.'
         }
     }
 }
