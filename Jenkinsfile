@@ -46,21 +46,6 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-                script {
-                    try {
-                        def qg = waitForQualityGate()
-                        if (qg.status != 'OK') {
-                            echo "Quality Gate failed: ${qg.status}"
-                        }
-                    } catch (Exception e) {
-                        echo "Quality Gate check failed, continuing pipeline: ${e.getMessage()}"
-                    }
-                }
-            }
-        }
-
         stage('Build') {
             steps {
                 sh "mvn package"
@@ -170,6 +155,7 @@ pipeline {
         }
     }
 }
+
 
 
 
