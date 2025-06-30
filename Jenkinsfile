@@ -105,7 +105,7 @@ pipeline {
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "kubectl apply -f deployment-service.yaml"
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
                 }
             }
         }
@@ -121,8 +121,8 @@ pipeline {
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "kubectl get pods -n webapps"
-                    sh "kubectl get svc -n webapps"
+                    sh "/usr/local/bin/kubectl get pods -n webapps"
+                    sh "/usr/local/bin/kubectl get svc -n webapps"
                 }
             }
         }
@@ -163,7 +163,6 @@ pipeline {
         }
     }
 }
-
 
 
 
