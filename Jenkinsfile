@@ -55,8 +55,13 @@ pipeline {
         stage('Publish To Nexus') {
             steps {
                 script {
-                    echo "Skipping Nexus deployment - configure authentication if needed"
-                    echo "Artifact built successfully and available locally"
+                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            sh "mvn deploy"
+                        }
+                    }
+                    echo "Nexus deployment attempted - check logs for status"
+                    echo "Pipeline continues regardless of Nexus deployment result"
                 }
             }
         }
@@ -156,6 +161,8 @@ pipeline {
         }
     }
 }
+
+
 
 
 
