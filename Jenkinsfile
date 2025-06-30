@@ -10,6 +10,7 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
         K8S_SERVER_URL = 'https://172.31.40.23:6443'
+        NEXUS_URL = 'http://52.66.198.198:8081'
     }
 
     stages {
@@ -55,8 +56,23 @@ pipeline {
         stage('Publish To Nexus') {
             steps {
                 script {
-                    echo "Skipping Nexus deployment - configure authentication if needed"
-                    echo "Artifact built successfully and available locally"
+                    try {
+                        withCredentials([usernamePassword(credentialsId: 'nexus-cred',
+                                       usernameVariable: 'NEXUS_USERNAME',
+                                       passwordVariable: 'NEXUS_PASSWORD')]) {
+                            echo "Publishing artifact to Nexus repository..."
+                            sh '''
+                                mvn deploy -DskipTests=true \
+                                -Dmaven.install.skip=true \
+                                -s $JENKINS_HOME/.m2/settings.xml
+                            '''
+                            echo "Artifact published successfully to Nexus"
+                        }
+                    } catch (Exception e) {
+                        echo "Nexus deployment failed: ${e.getMessage()}"
+                        echo "Continuing pipeline - artifact available locally"
+                        currentBuild.result = 'UNSTABLE'
+                    }
                 }
             }
         }
