@@ -34,10 +34,8 @@ pipeline {
         stage('Security Analysis') {
             steps {
                 script {
-                    // Run Trivy scan
                     sh "trivy fs --format table -o trivy-fs-report.html ."
 
-                    // Run SonarQube analysis without waiting
                     withSonarQubeEnv('sonar') {
                         sh '''$SCANNER_HOME/bin/sonar-scanner \
                             -Dsonar.projectName=BoardGame \
@@ -60,12 +58,7 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                script {
-                    // Configure Maven settings with Nexus credentials
-                    configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
-                        sh "mvn deploy -s $MAVEN_SETTINGS"
-                    }
-                }
+                sh "mvn deploy -DskipTests=true"
             }
         }
 
@@ -119,7 +112,7 @@ pipeline {
             script {
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
+                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
                 def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
@@ -153,5 +146,3 @@ pipeline {
         }
     }
 }
-
-
