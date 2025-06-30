@@ -65,34 +65,41 @@ pipeline {
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
-                        // Deploy to appropriate repository based on version
-                        if (version.contains('SNAPSHOT')) {
-                            echo "Deploying SNAPSHOT version to nexus-snapshots repository"
-                            sh """
-                                mvn deploy:deploy-file \
-                                -DgroupId=com.javaproject \
-                                -DartifactId=database_service_project \
-                                -Dversion=${version} \
-                                -Dpackaging=jar \
-                                -Dfile=target/database_service_project-${version}.jar \
-                                -DrepositoryId=nexus-snapshots \
-                                -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
-                                -DgeneratePom=true
-                            """
-                        } else {
-                            echo "Deploying RELEASE version to nexus-releases repository"
-                            sh """
-                                mvn deploy:deploy-file \
-                                -DgroupId=com.javaproject \
-                                -DartifactId=database_service_project \
-                                -Dversion=${version} \
-                                -Dpackaging=jar \
-                                -Dfile=target/database_service_project-${version}.jar \
-                                -DrepositoryId=nexus-releases \
-                                -Durl=http://52.66.198.198:8081/repository/maven-releases/ \
-                                -DgeneratePom=true
-                            """
-                        }
+                        // Create temporary settings.xml with credentials
+                        sh '''
+                            mkdir -p ~/.m2
+                            cat > ~/.m2/settings.xml << EOF
+<settings>
+    <servers>
+        <server>
+            <id>nexus-snapshots</id>
+            <username>${NEXUS_USERNAME}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+        <server>
+            <id>nexus-releases</id>
+            <username>${NEXUS_USERNAME}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+</settings>
+EOF
+                        '''
+
+                        // Deploy to snapshots repository
+                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
+                        sh """
+                            mvn deploy:deploy-file \
+                            -DgroupId=com.javaproject \
+                            -DartifactId=database_service_project \
+                            -Dversion=${version} \
+                            -Dpackaging=jar \
+                            -Dfile=target/database_service_project-${version}.jar \
+                            -DrepositoryId=nexus-snapshots \
+                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
+                            -DgeneratePom=true \
+                            -s ~/.m2/settings.xml
+                        """
                         echo "Artifact published successfully to Nexus"
                     }
                 }
@@ -194,6 +201,7 @@ pipeline {
         }
     }
 }
+
 
 
 
