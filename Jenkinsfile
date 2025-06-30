@@ -9,7 +9,7 @@ pipeline {
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
-        K8S_NAMESPACE = 'webapps'
+        K8S_SERVER_URL = 'https://172.31.40.23:6443'
     }
 
     stages {
@@ -31,21 +31,25 @@ pipeline {
             }
         }
 
-        stage('Security Analysis') {
+        stage('File System Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
+                          -Dsonar.java.binaries=.'''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
             steps {
                 script {
-                    sh "trivy fs --format table -o trivy-fs-report.html ."
-
-                    withSonarQubeEnv('sonar') {
-                        sh '''$SCANNER_HOME/bin/sonar-scanner \
-                            -Dsonar.projectName=BoardGame \
-                            -Dsonar.projectKey=BoardGame \
-                            -Dsonar.java.binaries=target/classes \
-                            -Dsonar.sources=src/main \
-                            -Dsonar.tests=src/test \
-                            -Dsonar.exclusions=**/target/**,**/*.jar \
-                            -Dsonar.qualitygate.wait=false'''
-                    }
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
                 }
             }
         }
@@ -58,12 +62,8 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    sh """
-                        mvn deploy -DskipTests=true \
-                        -Dmaven.repo.username=${NEXUS_USER} \
-                        -Dmaven.repo.password=${NEXUS_PASS}
-                    """
+                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                    sh "mvn deploy"
                 }
             }
         }
@@ -96,18 +96,34 @@ pipeline {
 
         stage('Deploy To Kubernetes') {
             steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.40.23:6443') {
+                withKubeConfig(
+                    caCertificate: '',
+                    clusterName: 'kubernetes',
+                    contextName: '',
+                    credentialsId: 'k8-cred',
+                    namespace: 'webapps',
+                    restrictKubeConfigAccess: false,
+                    serverUrl: "${K8S_SERVER_URL}"
+                ) {
                     sh "kubectl apply -f deployment-service.yaml"
-                    sh "kubectl rollout status deployment/boardgame-deployment -n webapps --timeout=300s"
                 }
             }
         }
 
         stage('Verify the Deployment') {
             steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.40.23:6443') {
+                withKubeConfig(
+                    caCertificate: '',
+                    clusterName: 'kubernetes',
+                    contextName: '',
+                    credentialsId: 'k8-cred',
+                    namespace: 'webapps',
+                    restrictKubeConfigAccess: false,
+                    serverUrl: "${K8S_SERVER_URL}"
+                ) {
                     sh "kubectl get pods -n webapps"
                     sh "kubectl get svc -n webapps"
+                    sh "kubectl describe deployment -n webapps"
                 }
             }
         }
@@ -118,7 +134,7 @@ pipeline {
             script {
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
+                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
                 def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
@@ -152,4 +168,5 @@ pipeline {
         }
     }
 }
+
 
