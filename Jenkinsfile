@@ -8,6 +8,8 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = 'giri8608/board:latest'
+        K8S_NAMESPACE = 'webapps'
     }
 
     stages {
@@ -38,8 +40,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
-                          -Dsonar.java.binaries=.'''
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame -Dsonar.java.binaries=target/classes'''
                 }
             }
         }
@@ -47,7 +48,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
                 }
             }
         }
@@ -70,7 +71,7 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh "docker build -t giri8608/board:latest ."
+                        sh "docker build -t ${DOCKER_IMAGE} ."
                     }
                 }
             }
@@ -78,7 +79,7 @@ pipeline {
 
         stage('Docker Image Scan') {
             steps {
-                sh "trivy image --format table -o trivy-image-report.html giri8608/board:latest"
+                sh "trivy image --format table -o trivy-image-report.html ${DOCKER_IMAGE}"
             }
         }
 
@@ -86,7 +87,7 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh "docker push giri8608/board:latest"
+                        sh "docker push ${DOCKER_IMAGE}"
                     }
                 }
             }
@@ -94,15 +95,16 @@ pipeline {
 
         stage('Deploy To Kubernetes') {
             steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.41.129:6443') {
+                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.40.23:6443') {
                     sh "kubectl apply -f deployment-service.yaml"
+                    sh "kubectl rollout status deployment/boardgame-deployment -n webapps --timeout=300s"
                 }
             }
         }
 
         stage('Verify the Deployment') {
             steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.41.129:6443') {
+                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.40.23:6443') {
                     sh "kubectl get pods -n webapps"
                     sh "kubectl get svc -n webapps"
                 }
@@ -115,8 +117,8 @@ pipeline {
             script {
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
-                def bannerColor = pipelineStatus == 'SUCCESS' ? 'green' : 'red'
+                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
+                def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
                     <html>
@@ -124,7 +126,7 @@ pipeline {
                     <div style="border: 4px solid ${bannerColor}; padding: 10px;">
                     <h2>${jobName} - Build ${buildNumber}</h2>
                     <div style="background-color: ${bannerColor}; padding: 10px;">
-                    <h3 style="color: white;">Pipeline Status: ${pipelineStatus}</h3>
+                    <h3 style="color: white;">Pipeline Status: ${pipelineStatus.toUpperCase()}</h3>
                     </div>
                     <p>Check the <a href="${env.BUILD_URL}">console output</a>.</p>
                     </div>
@@ -133,7 +135,7 @@ pipeline {
                 """
 
                 emailext (
-                    subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus}",
+                    subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus.toUpperCase()}",
                     body: body,
                     to: 'giridharan9608@gmail.com',
                     from: 'jenkins@example.com',
@@ -143,7 +145,9 @@ pipeline {
                 )
             }
         }
+
+        cleanup {
+            cleanWs()
+        }
     }
 }
-
-
