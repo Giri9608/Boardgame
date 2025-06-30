@@ -15,7 +15,7 @@ pipeline {
     stages {
         stage('Git Checkout') {
             steps {
-                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
+                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boame.git'
             }
         }
 
@@ -40,7 +40,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.proKey=BoardGame \
                           -Dsonar.java.binaries=.'''
                 }
             }
@@ -54,14 +54,10 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                script {
-                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                            sh "mvn deploy"
-                        }
+                withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'N_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
+                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'm3', mavenSettingsConfig: '', traceability: true) {
+                        sh "mvn deploy"
                     }
-                    echo "Nexus deployment attempted - check logs for status"
-                    echo "Pipeline continues regardless of Nexus deployment result"
                 }
             }
         }
@@ -161,6 +157,8 @@ pipeline {
         }
     }
 }
+
+
 
 
 
