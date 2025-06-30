@@ -61,11 +61,39 @@ pipeline {
                                        usernameVariable: 'NEXUS_USERNAME',
                                        passwordVariable: 'NEXUS_PASSWORD')]) {
                             echo "Publishing artifact to Nexus repository..."
-                            sh '''
-                                mvn deploy -DskipTests=true \
-                                -Dmaven.install.skip=true \
-                                -s $JENKINS_HOME/.m2/settings.xml
-                            '''
+
+                            // Get project version
+                            def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
+                            echo "Project version: ${version}"
+
+                            // Deploy to appropriate repository based on version
+                            if (version.contains('SNAPSHOT')) {
+                                echo "Deploying SNAPSHOT version to nexus-snapshots repository"
+                                sh '''
+                                    mvn deploy:deploy-file \
+                                    -DgroupId=com.javaproject \
+                                    -DartifactId=database_service_project \
+                                    -Dversion=${version} \
+                                    -Dpackaging=jar \
+                                    -Dfile=target/database_service_project-${version}.jar \
+                                    -DrepositoryId=nexus-snapshots \
+                                    -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
+                                    -DgeneratePom=true
+                                '''
+                            } else {
+                                echo "Deploying RELEASE version to nexus-releases repository"
+                                sh '''
+                                    mvn deploy:deploy-file \
+                                    -DgroupId=com.javaproject \
+                                    -DartifactId=database_service_project \
+                                    -Dversion=${version} \
+                                    -Dpackaging=jar \
+                                    -Dfile=target/database_service_project-${version}.jar \
+                                    -DrepositoryId=nexus-releases \
+                                    -Durl=http://52.66.198.198:8081/repository/maven-releases/ \
+                                    -DgeneratePom=true
+                                '''
+                            }
                             echo "Artifact published successfully to Nexus"
                         }
                     } catch (Exception e) {
