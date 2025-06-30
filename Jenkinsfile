@@ -31,25 +31,22 @@ pipeline {
             }
         }
 
-        stage('Parallel Security Analysis') {
-            parallel {
-                stage('SonarQube Analysis') {
-                    steps {
-                        withSonarQubeEnv('sonar') {
-                            sh '''$SCANNER_HOME/bin/sonar-scanner \
-                                -Dsonar.projectName=BoardGame \
-                                -Dsonar.projectKey=BoardGame \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.sources=src/main \
-                                -Dsonar.tests=src/test \
-                                -Dsonar.exclusions=**/target/**,**/*.jar \
-                                -Dsonar.qualitygate.wait=false'''
-                        }
-                    }
-                }
-                stage('File System Scan') {
-                    steps {
-                        sh "trivy fs --format table -o trivy-fs-report.html ."
+        stage('Security Analysis') {
+            steps {
+                script {
+                    // Run Trivy scan
+                    sh "trivy fs --format table -o trivy-fs-report.html ."
+
+                    // Run SonarQube analysis without waiting
+                    withSonarQubeEnv('sonar') {
+                        sh '''$SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=BoardGame \
+                            -Dsonar.projectKey=BoardGame \
+                            -Dsonar.java.binaries=target/classes \
+                            -Dsonar.sources=src/main \
+                            -Dsonar.tests=src/test \
+                            -Dsonar.exclusions=**/target/**,**/*.jar \
+                            -Dsonar.qualitygate.wait=false'''
                     }
                 }
             }
@@ -63,8 +60,11 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                    sh "mvn deploy"
+                script {
+                    // Configure Maven settings with Nexus credentials
+                    configFileProvider([configFile(fileId: 'maven-settings', variable: 'MAVEN_SETTINGS')]) {
+                        sh "mvn deploy -s $MAVEN_SETTINGS"
+                    }
                 }
             }
         }
@@ -131,7 +131,6 @@ pipeline {
                     <h3 style="color: white;">Pipeline Status: ${pipelineStatus.toUpperCase()}</h3>
                     </div>
                     <p>Check the <a href="${env.BUILD_URL}">console output</a>.</p>
-                    <p>SonarQube Results: <a href="http://your-sonar-server:9000/dashboard?id=BoardGame">View Dashboard</a></p>
                     </div>
                     </body>
                     </html>
@@ -154,3 +153,5 @@ pipeline {
         }
     }
 }
+
+
