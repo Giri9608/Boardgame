@@ -31,24 +31,26 @@ pipeline {
             }
         }
 
-        stage('File System Scan') {
-            steps {
-                sh "trivy fs --format table -o trivy-fs-report.html ."
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame -Dsonar.java.binaries=target/classes'''
+        stage('Parallel Security Analysis') {
+            parallel {
+                stage('SonarQube Analysis') {
+                    steps {
+                        withSonarQubeEnv('sonar') {
+                            sh '''$SCANNER_HOME/bin/sonar-scanner \
+                                -Dsonar.projectName=BoardGame \
+                                -Dsonar.projectKey=BoardGame \
+                                -Dsonar.java.binaries=target/classes \
+                                -Dsonar.sources=src/main \
+                                -Dsonar.tests=src/test \
+                                -Dsonar.exclusions=**/target/**,**/*.jar \
+                                -Dsonar.qualitygate.wait=false'''
+                        }
+                    }
                 }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                stage('File System Scan') {
+                    steps {
+                        sh "trivy fs --format table -o trivy-fs-report.html ."
+                    }
                 }
             }
         }
@@ -129,6 +131,7 @@ pipeline {
                     <h3 style="color: white;">Pipeline Status: ${pipelineStatus.toUpperCase()}</h3>
                     </div>
                     <p>Check the <a href="${env.BUILD_URL}">console output</a>.</p>
+                    <p>SonarQube Results: <a href="http://your-sonar-server:9000/dashboard?id=BoardGame">View Dashboard</a></p>
                     </div>
                     </body>
                     </html>
