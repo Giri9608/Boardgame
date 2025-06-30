@@ -58,7 +58,13 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                sh "mvn deploy -DskipTests=true"
+                withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                    sh """
+                        mvn deploy -DskipTests=true \
+                        -Dmaven.repo.username=${NEXUS_USER} \
+                        -Dmaven.repo.password=${NEXUS_PASS}
+                    """
+                }
             }
         }
 
@@ -146,5 +152,4 @@ pipeline {
         }
     }
 }
-
 
