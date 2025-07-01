@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -86,7 +87,7 @@ pipeline {
 EOF
                         '''
 
-                        // Deploy to snapshots repository
+                        // Deploy to snapshots repository - FIXED URL
                         echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
@@ -96,7 +97,7 @@ EOF
                             -Dpackaging=jar \
                             -Dfile=target/database_service_project-${version}.jar \
                             -DrepositoryId=nexus-snapshots \
-                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
+                            -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
                             -DgeneratePom=true \
                             -s ~/.m2/settings.xml
                         """
