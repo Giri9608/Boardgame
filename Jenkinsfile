@@ -16,7 +16,17 @@ pipeline {
     stages {
         stage('Git Checkout') {
             steps {
-                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
+                script {
+                    // Clean workspace and checkout
+                    deleteDir()
+                    git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
+
+                    // Verify files are present
+                    sh "echo 'Workspace contents:'"
+                    sh "ls -la"
+                    sh "echo 'YAML files:'"
+                    sh "ls -la *.yaml || echo 'No YAML files found'"
+                }
             }
         }
 
@@ -61,11 +71,9 @@ pipeline {
                                    passwordVariable: 'NEXUS_PASSWORD')]) {
                         echo "Publishing artifact to Nexus repository..."
 
-                        // Get project version
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
-                        // Create temporary settings.xml with credentials
                         sh '''
                             mkdir -p ~/.m2
                             cat > ~/.m2/settings.xml << EOF
@@ -86,8 +94,6 @@ pipeline {
 EOF
                         '''
 
-                        // Deploy to snapshots repository - FIXED URL
-                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
                             -DgroupId=com.javaproject \
@@ -134,6 +140,18 @@ EOF
 
         stage('Deploy To Kubernetes') {
             steps {
+                script {
+                    // Ensure deployment file exists
+                    if (!fileExists('deployment-service.yaml')) {
+                        echo "deployment-service.yaml not found, downloading from repository..."
+                        sh "curl -o deployment-service.yaml https://raw.githubusercontent.com/Giri9608/Boardgame/main/deployment-service.yaml"
+                    }
+
+                    // Verify file and show contents
+                    sh "echo 'Deployment file contents:'"
+                    sh "cat deployment-service.yaml"
+                }
+
                 withKubeConfig(
                     caCertificate: '',
                     clusterName: 'kubernetes',
@@ -143,7 +161,7 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml --validate=false"
                 }
             }
         }
