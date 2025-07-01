@@ -61,6 +61,9 @@ pipeline {
                                    passwordVariable: 'NEXUS_PASSWORD')]) {
                         echo "Publishing artifact to Nexus repository..."
 
+                        // Test connectivity first
+                        sh "curl -f --connect-timeout 10 ${NEXUS_URL} || (echo 'Cannot connect to Nexus at ${NEXUS_URL}' && exit 1)"
+
                         // Get project version
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
@@ -96,7 +99,7 @@ EOF
                             -Dpackaging=jar \
                             -Dfile=target/database_service_project-${version}.jar \
                             -DrepositoryId=nexus-snapshots \
-                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
+                            -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
                             -DgeneratePom=true \
                             -s ~/.m2/settings.xml
                         """
