@@ -61,14 +61,9 @@ pipeline {
                                    passwordVariable: 'NEXUS_PASSWORD')]) {
                         echo "Publishing artifact to Nexus repository..."
 
-                        // Test connectivity first
-                        sh "curl -f --connect-timeout 10 ${NEXUS_URL} || (echo 'Cannot connect to Nexus at ${NEXUS_URL}' && exit 1)"
-
-                        // Get project version
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
-                        // Create temporary settings.xml with credentials
                         sh '''
                             mkdir -p ~/.m2
                             cat > ~/.m2/settings.xml << EOF
@@ -89,8 +84,6 @@ pipeline {
 EOF
                         '''
 
-                        // Deploy to snapshots repository
-                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
                             -DgroupId=com.javaproject \
@@ -146,7 +139,16 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml --validate=false"
+                    sh """
+                        echo "Creating namespace if it doesn't exist..."
+                        /usr/local/bin/kubectl create namespace webapps --dry-run=client -o yaml | /usr/local/bin/kubectl apply -f - --insecure-skip-tls-verify
+
+                        echo "Applying Kubernetes deployment..."
+                        /usr/local/bin/kubectl apply -f deployment-service.yaml --insecure-skip-tls-verify
+
+                        echo "Waiting for deployment to be ready..."
+                        /usr/local/bin/kubectl rollout status deployment/boardgame-deployment -n webapps --insecure-skip-tls-verify --timeout=300s
+                    """
                 }
             }
         }
@@ -162,8 +164,19 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "/usr/local/bin/kubectl get pods -n webapps"
-                    sh "/usr/local/bin/kubectl get svc -n webapps"
+                    sh """
+                        echo "=== PODS ==="
+                        /usr/local/bin/kubectl get pods -n webapps --insecure-skip-tls-verify
+
+                        echo "=== SERVICES ==="
+                        /usr/local/bin/kubectl get svc -n webapps --insecure-skip-tls-verify
+
+                        echo "=== DEPLOYMENT STATUS ==="
+                        /usr/local/bin/kubectl get deployment -n webapps --insecure-skip-tls-verify
+
+                        echo "=== POD LOGS (if any issues) ==="
+                        /usr/local/bin/kubectl logs -l app=boardgame -n webapps --tail=50 --insecure-skip-tls-verify || echo "No logs available yet"
+                    """
                 }
             }
         }
@@ -204,3 +217,4 @@ EOF
         }
     }
 }
+
