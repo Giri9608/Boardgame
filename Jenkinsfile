@@ -16,17 +16,7 @@ pipeline {
     stages {
         stage('Git Checkout') {
             steps {
-                script {
-                    // Clean workspace and checkout
-                    deleteDir()
-                    git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
-
-                    // Verify files are present
-                    sh "echo 'Workspace contents:'"
-                    sh "ls -la"
-                    sh "echo 'YAML files:'"
-                    sh "ls -la *.yaml || echo 'No YAML files found'"
-                }
+                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
             }
         }
 
@@ -71,9 +61,11 @@ pipeline {
                                    passwordVariable: 'NEXUS_PASSWORD')]) {
                         echo "Publishing artifact to Nexus repository..."
 
+                        // Get project version
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
+                        // Create temporary settings.xml with credentials
                         sh '''
                             mkdir -p ~/.m2
                             cat > ~/.m2/settings.xml << EOF
@@ -94,6 +86,8 @@ pipeline {
 EOF
                         '''
 
+                        // Deploy to snapshots repository
+                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
                             -DgroupId=com.javaproject \
@@ -102,7 +96,7 @@ EOF
                             -Dpackaging=jar \
                             -Dfile=target/database_service_project-${version}.jar \
                             -DrepositoryId=nexus-snapshots \
-                            -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
+                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
                             -DgeneratePom=true \
                             -s ~/.m2/settings.xml
                         """
@@ -140,18 +134,6 @@ EOF
 
         stage('Deploy To Kubernetes') {
             steps {
-                script {
-                    // Ensure deployment file exists
-                    if (!fileExists('deployment-service.yaml')) {
-                        echo "deployment-service.yaml not found, downloading from repository..."
-                        sh "curl -o deployment-service.yaml https://raw.githubusercontent.com/Giri9608/Boardgame/main/deployment-service.yaml"
-                    }
-
-                    // Verify file and show contents
-                    sh "echo 'Deployment file contents:'"
-                    sh "cat deployment-service.yaml"
-                }
-
                 withKubeConfig(
                     caCertificate: '',
                     clusterName: 'kubernetes',
@@ -161,7 +143,7 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml --validate=false"
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
                 }
             }
         }
@@ -219,6 +201,28 @@ EOF
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
