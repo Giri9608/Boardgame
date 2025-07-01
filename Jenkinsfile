@@ -61,9 +61,11 @@ pipeline {
                                    passwordVariable: 'NEXUS_PASSWORD')]) {
                         echo "Publishing artifact to Nexus repository..."
 
+                        // Get project version
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
+                        // Create temporary settings.xml with credentials
                         sh '''
                             mkdir -p ~/.m2
                             cat > ~/.m2/settings.xml << EOF
@@ -84,6 +86,8 @@ pipeline {
 EOF
                         '''
 
+                        // Deploy to snapshots repository
+                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
                             -DgroupId=com.javaproject \
@@ -92,7 +96,7 @@ EOF
                             -Dpackaging=jar \
                             -Dfile=target/database_service_project-${version}.jar \
                             -DrepositoryId=nexus-snapshots \
-                            -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
+                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
                             -DgeneratePom=true \
                             -s ~/.m2/settings.xml
                         """
@@ -139,15 +143,7 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh """
-                        echo "Creating namespace if it doesn't exist..."
-                        /usr/local/bin/kubectl create namespace webapps --insecure-skip-tls-verify || echo "Namespace may already exist - continuing..."
-
-                        echo "Applying Kubernetes deployment..."
-                        /usr/local/bin/kubectl apply -f deployment-service.yaml --insecure-skip-tls-verify --validate=false
-
-                        echo "Deployment applied successfully!"
-                    """
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
                 }
             }
         }
@@ -163,16 +159,8 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh """
-                        echo "=== PODS ==="
-                        /usr/local/bin/kubectl get pods -n webapps --insecure-skip-tls-verify
-
-                        echo "=== SERVICES ==="
-                        /usr/local/bin/kubectl get svc -n webapps --insecure-skip-tls-verify
-
-                        echo "=== DEPLOYMENT STATUS ==="
-                        /usr/local/bin/kubectl get deployment -n webapps --insecure-skip-tls-verify
-                    """
+                    sh "/usr/local/bin/kubectl get pods -n webapps"
+                    sh "/usr/local/bin/kubectl get svc -n webapps"
                 }
             }
         }
@@ -213,5 +201,6 @@ EOF
         }
     }
 }
+
 
 
