@@ -86,20 +86,39 @@ pipeline {
 EOF
                         '''
 
-                        // Deploy to snapshots repository
-                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
-                        sh """
-                            mvn deploy:deploy-file \
-                            -DgroupId=com.javaproject \
-                            -DartifactId=database_service_project \
-                            -Dversion=${version} \
-                            -Dpackaging=jar \
-                            -Dfile=target/database_service_project-${version}.jar \
-                            -DrepositoryId=nexus-snapshots \
-                            -Durl=http://52.66.198.198:8081/repository/maven-snapshots/ \
-                            -DgeneratePom=true \
-                            -s ~/.m2/settings.xml
-                        """
+                        // Test connectivity first
+                        sh "curl -f ${NEXUS_URL}/service/rest/v1/status || echo 'Nexus connectivity test failed'"
+
+                        // Deploy based on version type
+                        if (version.contains('SNAPSHOT')) {
+                            echo "Deploying SNAPSHOT version to nexus-snapshots repository"
+                            sh """
+                                mvn deploy:deploy-file \
+                                -DgroupId=com.javaproject \
+                                -DartifactId=database_service_project \
+                                -Dversion=${version} \
+                                -Dpackaging=jar \
+                                -Dfile=target/database_service_project-${version}.jar \
+                                -DrepositoryId=nexus-snapshots \
+                                -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
+                                -DgeneratePom=true \
+                                -s ~/.m2/settings.xml
+                            """
+                        } else {
+                            echo "Deploying RELEASE version to nexus-releases repository"
+                            sh """
+                                mvn deploy:deploy-file \
+                                -DgroupId=com.javaproject \
+                                -DartifactId=database_service_project \
+                                -Dversion=${version} \
+                                -Dpackaging=jar \
+                                -Dfile=target/database_service_project-${version}.jar \
+                                -DrepositoryId=nexus-releases \
+                                -Durl=${NEXUS_URL}/repository/maven-releases/ \
+                                -DgeneratePom=true \
+                                -s ~/.m2/settings.xml
+                            """
+                        }
                         echo "Artifact published successfully to Nexus"
                     }
                 }
@@ -201,6 +220,7 @@ EOF
         }
     }
 }
+
 
 
 
