@@ -65,6 +65,10 @@ pipeline {
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
+                        // Test Nexus connectivity first
+                        echo "Testing connectivity to Nexus..."
+                        sh "curl -f ${NEXUS_URL}/service/rest/v1/status || echo 'Nexus connectivity test failed'"
+
                         // Create temporary settings.xml with credentials
                         sh '''
                             mkdir -p ~/.m2
@@ -85,9 +89,6 @@ pipeline {
 </settings>
 EOF
                         '''
-
-                        // Test connectivity first
-                        sh "curl -f ${NEXUS_URL}/service/rest/v1/status || echo 'Nexus connectivity test failed'"
 
                         // Deploy based on version type
                         if (version.contains('SNAPSHOT')) {
@@ -220,6 +221,7 @@ EOF
         }
     }
 }
+
 
 
 
