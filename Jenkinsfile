@@ -146,7 +146,7 @@ EOF
                     restrictKubeConfigAccess: false,
                     serverUrl: "${K8S_SERVER_URL}"
                 ) {
-                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml --validate=false"
                 }
             }
         }
@@ -204,16 +204,3 @@ EOF
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
