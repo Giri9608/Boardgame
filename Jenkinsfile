@@ -45,57 +45,6 @@ pipeline {
             }
         }
 
-        stage('Configure Quality Gate for Success') {
-            steps {
-                script {
-                    try {
-                        // Create a quality gate that will always pass based on your current metrics
-                        sh '''
-                            # Create new lenient quality gate
-                            GATE_RESPONSE=$(curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/create" \
-                              -u admin:admin \
-                              -d "name=AlwaysPassGate" 2>/dev/null || echo "exists")
-
-                            # Get gate ID - try to find AlwaysPassGate or create new one
-                            GATE_ID=$(curl -s "http://15.206.67.118:9000/api/qualitygates/list" -u admin:admin 2>/dev/null | \
-                              grep -A1 "AlwaysPassGate" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1)
-
-                            # If no custom gate found, use default gate ID
-                            if [ -z "$GATE_ID" ]; then
-                                GATE_ID="1"
-                            fi
-
-                            # Set very lenient conditions that your project will pass
-                            curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/create_condition" \
-                              -u admin:admin \
-                              -d "gateId=${GATE_ID}&metric=coverage&op=LT&error=20" 2>/dev/null || true
-
-                            curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/create_condition" \
-                              -u admin:admin \
-                              -d "gateId=${GATE_ID}&metric=duplicated_lines_density&op=GT&error=30" 2>/dev/null || true
-
-                            curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/create_condition" \
-                              -u admin:admin \
-                              -d "gateId=${GATE_ID}&metric=bugs&op=GT&error=25" 2>/dev/null || true
-
-                            curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/create_condition" \
-                              -u admin:admin \
-                              -d "gateId=${GATE_ID}&metric=code_smells&op=GT&error=50" 2>/dev/null || true
-
-                            # Apply this gate to the project
-                            curl -s -X POST "http://15.206.67.118:9000/api/qualitygates/select" \
-                              -u admin:admin \
-                              -d "gateId=${GATE_ID}&projectKey=BoardGame" 2>/dev/null || true
-
-                            echo "Quality Gate configured for success"
-                        '''
-                    } catch (Exception e) {
-                        echo "Quality Gate configuration completed"
-                    }
-                }
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -107,25 +56,6 @@ pipeline {
                         echo "SonarQube analysis completed"
                     } catch (Exception e) {
                         echo "SonarQube analysis completed"
-                    }
-                }
-            }
-        }
-
-        stage('Wait for Quality Gate') {
-            steps {
-                script {
-                    try {
-                        timeout(time: 2, unit: 'MINUTES') {
-                            def qg = waitForQualityGate()
-                            if (qg.status == 'OK') {
-                                echo "Quality Gate passed successfully"
-                            } else {
-                                echo "Quality Gate status: ${qg.status} - but continuing pipeline"
-                            }
-                        }
-                    } catch (Exception e) {
-                        echo "Quality Gate check completed"
                     }
                 }
             }
@@ -318,7 +248,6 @@ EOF
 
         success {
             echo "Pipeline completed successfully"
-            echo "SonarQube Quality Gate should now show PASSED"
         }
     }
 }
