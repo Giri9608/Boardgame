@@ -10,10 +10,11 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
         K8S_SERVER_URL = 'https://172.31.45.186:6443'
-        NEXUS_URL = 'http://65.0.205.25:8081'  // Fixed to match your actual server
+        NEXUS_URL = 'http://65.0.205.25:8081'
     }
 
     stages {
+        
         stage('Git Checkout') {
             steps {
                 git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
@@ -41,8 +42,17 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
-                          -Dsonar.java.binaries=.'''
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            $SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=BoardGame \
+                            -Dsonar.projectKey=BoardGame \
+                            -Dsonar.host.url=https://<YOUR-SONARQUBE-SERVER> \
+                            -Dsonar.login=$SONAR_TOKEN \
+                            -Dsonar.sources=. \
+                            -Dsonar.java.binaries=target/classes
+                        '''
+                    }
                 }
             }
         }
@@ -56,11 +66,8 @@ pipeline {
         stage('Publish To Nexus') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-cred',
-                                   usernameVariable: 'NEXUS_USERNAME',
-                                   passwordVariable: 'NEXUS_PASSWORD')]) {
-                        echo "Publishing artifact to Nexus repository..."
-
+                    withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
+                        
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
@@ -84,7 +91,6 @@ pipeline {
 EOF
                         '''
 
-                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
                         sh """
                             mvn deploy:deploy-file \
                             -DgroupId=com.javaproject \
