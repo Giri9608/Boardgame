@@ -10,7 +10,7 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
         K8S_SERVER_URL = 'https://172.31.45.186:6443'
-        NEXUS_URL = 'http://52.66.198.198:8081'
+        NEXUS_URL = 'http://65.0.205.25:8081'  // Fixed to match your actual server
     }
 
     stages {
