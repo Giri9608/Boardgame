@@ -10,7 +10,7 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
         K8S_SERVER_URL = 'https://172.31.45.186:6443'
-        NEXUS_URL = 'http://65.0.205.25:8081'
+        NEXUS_URL = 'http://65.0.205.25:8081'  // Fixed to match your actual server
     }
 
     stages {
@@ -34,87 +34,15 @@ pipeline {
 
         stage('File System Scan') {
             steps {
-                script {
-                    try {
-                        sh "trivy fs --format table -o trivy-fs-report.html ."
-                        echo "File system scan completed"
-                    } catch (Exception e) {
-                        echo "File system scan completed"
-                    }
-                }
-            }
-        }
-
-        stage('Reset SonarQube Quality Gate') {
-            steps {
-                script {
-                    try {
-                        sh '''
-                            # Stop SonarQube container
-                            docker exec -u root sonar sh -c "
-                                # Reset quality gate to always pass
-                                echo 'UPDATE quality_gates SET is_built_in=false WHERE name=\"Sonar way\";' > /tmp/reset.sql
-                                echo 'DELETE FROM quality_gate_conditions WHERE quality_gate_id=1;' >> /tmp/reset.sql
-                                echo 'INSERT INTO quality_gate_conditions (quality_gate_id, metric_key, operator, value_error, value_warning, period) VALUES (1, \"coverage\", \"LT\", \"1\", NULL, 1);' >> /tmp/reset.sql
-                            " || true
-
-                            # Alternative: Create completely new project analysis
-                            curl -X POST "http://15.206.67.118:9000/api/projects/delete" \
-                              -u admin:admin \
-                              -d "project=BoardGame" || true
-
-                            sleep 5
-                        '''
-                        echo "SonarQube reset completed"
-                    } catch (Exception e) {
-                        echo "SonarQube reset completed"
-                    }
-                }
+                sh "trivy fs --format table -o trivy-fs-report.html ."
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    try {
-                        withSonarQubeEnv('sonar') {
-                            sh '''$SCANNER_HOME/bin/sonar-scanner \
-                                  -Dsonar.projectName=BoardGame \
-                                  -Dsonar.projectKey=BoardGame \
-                                  -Dsonar.java.binaries=. \
-                                  -Dsonar.qualitygate.wait=false \
-                                  -Dsonar.buildbreaker.skip=true \
-                                  -Dsonar.coverage.exclusions=**/* \
-                                  -Dsonar.cpd.exclusions=**/* \
-                                  -Dsonar.exclusions=**/*'''
-                        }
-                        echo "SonarQube analysis completed"
-                    } catch (Exception e) {
-                        echo "SonarQube analysis completed"
-                    }
-                }
-            }
-        }
-
-        stage('Force Quality Gate Pass') {
-            steps {
-                script {
-                    try {
-                        sh '''
-                            # Force update quality gate status to PASSED
-                            curl -X POST "http://15.206.67.118:9000/api/qualitygates/project_status" \
-                              -u admin:admin \
-                              -d "projectKey=BoardGame&status=OK" || true
-
-                            # Alternative: Remove project from any quality gate
-                            curl -X POST "http://15.206.67.118:9000/api/qualitygates/deselect" \
-                              -u admin:admin \
-                              -d "projectKey=BoardGame" || true
-                        '''
-                        echo "Quality gate status forced to PASS"
-                    } catch (Exception e) {
-                        echo "Quality gate bypass completed"
-                    }
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BoardGame -Dsonar.projectKey=BoardGame \
+                          -Dsonar.java.binaries=.'''
                 }
             }
         }
@@ -128,18 +56,17 @@ pipeline {
         stage('Publish To Nexus') {
             steps {
                 script {
-                    try {
-                        withCredentials([usernamePassword(credentialsId: 'nexus-cred',
-                                       usernameVariable: 'NEXUS_USERNAME',
-                                       passwordVariable: 'NEXUS_PASSWORD')]) {
-                            echo "Publishing artifact to Nexus repository..."
+                    withCredentials([usernamePassword(credentialsId: 'nexus-cred',
+                                   usernameVariable: 'NEXUS_USERNAME',
+                                   passwordVariable: 'NEXUS_PASSWORD')]) {
+                        echo "Publishing artifact to Nexus repository..."
 
-                            def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
-                            echo "Project version: ${version}"
+                        def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
+                        echo "Project version: ${version}"
 
-                            sh '''
-                                mkdir -p ~/.m2
-                                cat > ~/.m2/settings.xml << EOF
+                        sh '''
+                            mkdir -p ~/.m2
+                            cat > ~/.m2/settings.xml << EOF
 <settings>
     <servers>
         <server>
@@ -155,25 +82,22 @@ pipeline {
     </servers>
 </settings>
 EOF
-                            '''
+                        '''
 
-                            echo "Deploying SNAPSHOT version to nexus-snapshots repository"
-                            sh """
-                                mvn deploy:deploy-file \
-                                -DgroupId=com.javaproject \
-                                -DartifactId=database_service_project \
-                                -Dversion=${version} \
-                                -Dpackaging=jar \
-                                -Dfile=target/database_service_project-${version}.jar \
-                                -DrepositoryId=nexus-snapshots \
-                                -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
-                                -DgeneratePom=true \
-                                -s ~/.m2/settings.xml
-                            """
-                            echo "Artifact published successfully to Nexus"
-                        }
-                    } catch (Exception e) {
-                        echo "Nexus publishing completed"
+                        echo "Deploying SNAPSHOT version to nexus-snapshots repository"
+                        sh """
+                            mvn deploy:deploy-file \
+                            -DgroupId=com.javaproject \
+                            -DartifactId=database_service_project \
+                            -Dversion=${version} \
+                            -Dpackaging=jar \
+                            -Dfile=target/database_service_project-${version}.jar \
+                            -DrepositoryId=nexus-snapshots \
+                            -Durl=${NEXUS_URL}/repository/maven-snapshots/ \
+                            -DgeneratePom=true \
+                            -s ~/.m2/settings.xml
+                        """
+                        echo "Artifact published successfully to Nexus"
                     }
                 }
             }
@@ -182,13 +106,8 @@ EOF
         stage('Build & Tag Docker Image') {
             steps {
                 script {
-                    try {
-                        withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                            sh "docker build -t ${DOCKER_IMAGE} ."
-                        }
-                        echo "Docker image built successfully"
-                    } catch (Exception e) {
-                        echo "Docker image build completed"
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker build -t ${DOCKER_IMAGE} ."
                     }
                 }
             }
@@ -196,27 +115,15 @@ EOF
 
         stage('Docker Image Scan') {
             steps {
-                script {
-                    try {
-                        sh "trivy image --format table -o trivy-image-report.html ${DOCKER_IMAGE}"
-                        echo "Docker image security scan completed"
-                    } catch (Exception e) {
-                        echo "Docker image scan completed"
-                    }
-                }
+                sh "trivy image --format table -o trivy-image-report.html ${DOCKER_IMAGE}"
             }
         }
 
         stage('Push Docker Image') {
             steps {
                 script {
-                    try {
-                        withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                            sh "docker push ${DOCKER_IMAGE}"
-                        }
-                        echo "Docker image pushed successfully"
-                    } catch (Exception e) {
-                        echo "Docker image push completed"
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker push ${DOCKER_IMAGE}"
                     }
                 }
             }
@@ -224,47 +131,33 @@ EOF
 
         stage('Deploy To Kubernetes') {
             steps {
-                script {
-                    try {
-                        withKubeConfig(
-                            caCertificate: '',
-                            clusterName: 'kubernetes',
-                            contextName: '',
-                            credentialsId: 'k8-cred',
-                            namespace: 'webapps',
-                            restrictKubeConfigAccess: false,
-                            serverUrl: "${K8S_SERVER_URL}"
-                        ) {
-                            sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
-                        }
-                        echo "Kubernetes deployment completed successfully"
-                    } catch (Exception e) {
-                        echo "Kubernetes deployment completed"
-                    }
+                withKubeConfig(
+                    caCertificate: '',
+                    clusterName: 'kubernetes',
+                    contextName: '',
+                    credentialsId: 'k8-cred',
+                    namespace: 'webapps',
+                    restrictKubeConfigAccess: false,
+                    serverUrl: "${K8S_SERVER_URL}"
+                ) {
+                    sh "/usr/local/bin/kubectl apply -f deployment-service.yaml"
                 }
             }
         }
 
         stage('Verify the Deployment') {
             steps {
-                script {
-                    try {
-                        withKubeConfig(
-                            caCertificate: '',
-                            clusterName: 'kubernetes',
-                            contextName: '',
-                            credentialsId: 'k8-cred',
-                            namespace: 'webapps',
-                            restrictKubeConfigAccess: false,
-                            serverUrl: "${K8S_SERVER_URL}"
-                        ) {
-                            sh "/usr/local/bin/kubectl get pods -n webapps"
-                            sh "/usr/local/bin/kubectl get svc -n webapps"
-                        }
-                        echo "Deployment verification completed successfully"
-                    } catch (Exception e) {
-                        echo "Deployment verification completed"
-                    }
+                withKubeConfig(
+                    caCertificate: '',
+                    clusterName: 'kubernetes',
+                    contextName: '',
+                    credentialsId: 'k8-cred',
+                    namespace: 'webapps',
+                    restrictKubeConfigAccess: false,
+                    serverUrl: "${K8S_SERVER_URL}"
+                ) {
+                    sh "/usr/local/bin/kubectl get pods -n webapps"
+                    sh "/usr/local/bin/kubectl get svc -n webapps"
                 }
             }
         }
@@ -276,7 +169,7 @@ EOF
                 def jobName = env.JOB_NAME
                 def buildNumber = env.BUILD_NUMBER
                 def pipelineStatus = currentBuild.result ?: 'SUCCESS'
-                def bannerColor = 'green'
+                def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
 
                 def body = """
                     <html>
@@ -303,9 +196,8 @@ EOF
                 )
             }
         }
-
-        success {
-            echo "Pipeline completed successfully"
-        }
     }
 }
+
+
+
