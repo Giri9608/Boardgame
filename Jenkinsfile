@@ -11,10 +11,11 @@ pipeline {
         DOCKER_IMAGE = 'giri8608/board:latest'
         K8S_SERVER_URL = 'https://172.31.45.186:6443'
         NEXUS_URL = 'http://65.0.205.25:8081'
+        SONARQUBE_URL = 'http://65.0.205.25:9000' // Your SonarQube server URL
     }
 
     stages {
-        
+
         stage('Git Checkout') {
             steps {
                 git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Giri9608/Boardgame.git'
@@ -43,15 +44,15 @@ pipeline {
             steps {
                 withSonarQubeEnv('sonar') {
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                        sh '''
+                        sh """
                             $SCANNER_HOME/bin/sonar-scanner \
                             -Dsonar.projectName=BoardGame \
                             -Dsonar.projectKey=BoardGame \
-                            -Dsonar.host.url=https://<YOUR-SONARQUBE-SERVER> \
+                            -Dsonar.host.url=${SONARQUBE_URL} \
                             -Dsonar.login=$SONAR_TOKEN \
                             -Dsonar.sources=. \
                             -Dsonar.java.binaries=target/classes
-                        '''
+                        """
                     }
                 }
             }
@@ -67,7 +68,7 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'nexus-cred', usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
-                        
+
                         def version = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
                         echo "Project version: ${version}"
 
@@ -204,6 +205,7 @@ EOF
         }
     }
 }
+
 
 
 
