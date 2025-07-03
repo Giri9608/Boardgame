@@ -9,8 +9,8 @@ pipeline {
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
         DOCKER_IMAGE = 'giri8608/board:latest'
-        K8S_SERVER_URL = 'https://172.31.45.186:6443'
-        NEXUS_URL = 'http://65.0.205.25:8081'
+        K8S_SERVER_URL = 'https://172.31.43.84:6443'
+        NEXUS_URL = 'http://3.108.41.67:8081'
     }
 
     stages {
@@ -51,7 +51,7 @@ pipeline {
                     try {
                         sh '''
                             # Delete the existing project to start fresh
-                            curl -X POST "http://15.206.67.118:9000/api/projects/delete" \
+                            curl -X POST "http://15.207.87.63:9000//api/projects/delete" \
                               -u admin:admin \
                               -d "project=BoardGame" || echo "Project deletion attempted"
 
@@ -95,7 +95,7 @@ pipeline {
                             sleep 15
 
                             # Get the lenient quality gate ID (the one you created manually)
-                            LENIENT_GATE_ID=$(curl -s "http://15.206.67.118:9000/api/qualitygates/list" -u admin:admin | \
+                            LENIENT_GATE_ID=$(curl -s "http://15.207.87.63:9000/api/qualitygates/list" -u admin:admin | \
                               grep -B2 -A2 "LenientGate\\|AlwaysPass\\|Custom" | grep -o '"id":[0-9]*' | cut -d':' -f2 | head -1)
 
                             # If no custom gate found, use default and modify it
@@ -103,23 +103,23 @@ pipeline {
                                 LENIENT_GATE_ID="1"
 
                                 # Get existing conditions and delete them
-                                CONDITIONS=$(curl -s "http://15.206.67.118:9000/api/qualitygates/show?id=1" -u admin:admin | \
+                                CONDITIONS=$(curl -s "http://15.207.87.63:9000/api/qualitygates/show?id=1" -u admin:admin | \
                                   grep -o '"id":[0-9]*' | cut -d':' -f2)
 
                                 for CONDITION_ID in $CONDITIONS; do
-                                    curl -X POST "http://15.206.67.118:9000/api/qualitygates/delete_condition" \
+                                    curl -X POST "http://15.207.87.63:9000/api/qualitygates/delete_condition" \
                                       -u admin:admin \
                                       -d "id=$CONDITION_ID" 2>/dev/null || true
                                 done
 
                                 # Add very lenient conditions
-                                curl -X POST "http://15.206.67.118:9000/api/qualitygates/create_condition" \
+                                curl -X POST "http://15.207.87.63:9000/api/qualitygates/create_condition" \
                                   -u admin:admin \
                                   -d "gateId=1&metric=coverage&op=LT&error=5" 2>/dev/null || true
                             fi
 
                             # Apply the lenient gate to the project
-                            curl -X POST "http://15.206.67.118:9000/api/qualitygates/select" \
+                            curl -X POST "http://15.207.87.63:9000/api/qualitygates/select" \
                               -u admin:admin \
                               -d "gateId=${LENIENT_GATE_ID}&projectKey=BoardGame" || echo "Gate application attempted"
 
